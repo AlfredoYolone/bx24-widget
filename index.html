@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Widget</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; background: #fff; color: #333; padding: 24px; }
+  h1 { font-size: 18px; margin-bottom: 8px; }
+  p  { font-size: 14px; color: #666; margin-bottom: 16px; }
+  #log { font-family: monospace; font-size: 12px; background: #f4f4f4; border: 1px solid #ddd; padding: 12px; border-radius: 6px; line-height: 1.8; white-space: pre-wrap; }
+  .ok   { color: green; }
+  .warn { color: orange; }
+  .err  { color: red; }
+</style>
+</head>
+<body>
+
+  <h1>Meu Widget</h1>
+  <p>Conteúdo do widget aqui.</p>
+  <div id="log"></div>
+
+  <script src="https://api.bitrix24.com/api/v1/"></script>
+  <script>
+    var log = document.getElementById('log');
+
+    function addLog(msg, type) {
+      var line = document.createElement('div');
+      line.className = type || '';
+      line.textContent = new Date().toLocaleTimeString() + ' — ' + msg;
+      log.appendChild(line);
+    }
+
+    addLog('Página carregada.');
+
+    if (typeof BX24 === 'undefined') {
+      addLog('BX24 não encontrado no escopo global.', 'err');
+    } else {
+      addLog('BX24 detectado, chamando init()...', 'ok');
+      BX24.init(function() {
+        addLog('BX24.init() disparou o callback.', 'ok');
+        try {
+          BX24.resizeWindow(600, 400, function() {
+            addLog('resizeWindow(600, 400) — callback executado.', 'ok');
+          });
+          addLog('resizeWindow(600, 400) chamado sem erro imediato.', 'ok');
+        } catch(e) {
+          addLog('ERRO no resizeWindow: ' + e.message, 'err');
+        }
+      });
+    }
+  </script>
+</body>
+</html>
