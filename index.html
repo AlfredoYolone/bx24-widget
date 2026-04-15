@@ -2,54 +2,138 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Widget</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, sans-serif; background: #fff; color: #333; padding: 24px; }
-  h1 { font-size: 18px; margin-bottom: 8px; }
-  p  { font-size: 14px; color: #666; margin-bottom: 16px; }
-  #log { font-family: monospace; font-size: 12px; background: #f4f4f4; border: 1px solid #ddd; padding: 12px; border-radius: 6px; line-height: 1.8; white-space: pre-wrap; }
-  .ok   { color: green; }
-  .warn { color: orange; }
-  .err  { color: red; }
+  .spinner-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #888;
+    font-size: 14px;
+  }
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid #ddd;
+    border-top-color: #555;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #view-popup { display: none; }
+  #view-popup h1 { font-size: 18px; margin-bottom: 16px; color: #111; }
+
+  .info-row { margin-bottom: 10px; font-size: 14px; }
+  .info-row strong { color: #555; margin-right: 6px; }
+
+  #bx24-result {
+    margin-top: 16px;
+    background: #f4f4f4;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 12px;
+    font-family: monospace;
+    font-size: 11px;
+    white-space: pre-wrap;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .tag {
+    display: inline-block;
+    background: #e8f0fe;
+    color: #1a73e8;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-bottom: 12px;
+  }
 </style>
 </head>
 <body>
 
-  <h1>Meu Widget</h1>
-  <p>Conteúdo do widget aqui.</p>
-  <div id="log"></div>
+  <div class="spinner-wrap" id="view-tab">
+    <div class="spinner"></div>
+    <span>Abrindo...</span>
+  </div>
+
+  <div id="view-popup">
+    <span class="tag" id="placement-label">popup</span>
+    <h1>Teste de chamada BX24</h1>
+    <div class="info-row"><strong>TaskId recebido:</strong> <span id="task-id">—</span></div>
+    <div class="info-row"><strong>Resultado da chamada:</strong></div>
+    <div id="bx24-result">Aguardando...</div>
+  </div>
 
   <script src="https://api.bitrix24.com/api/v1/"></script>
   <script>
-    var log = document.getElementById('log');
+    BX24.init(function() {
 
-    function addLog(msg, type) {
-      var line = document.createElement('div');
-      line.className = type || '';
-      line.textContent = new Date().toLocaleTimeString() + ' — ' + msg;
-      log.appendChild(line);
-    }
+      var info = BX24.placement.info();
+      var options = info.options || {};
+      var isPopup = options.opened === true || options.opened === 'true'
+                 || options.bx24_opened === true || options.bx24_opened === 'true';
 
-    addLog('Página carregada.');
+      if (isPopup) {
+        document.getElementById('view-tab').style.display = 'none';
+        document.getElementById('view-popup').style.display = 'block';
+        BX24.resizeWindow(600, 400);
 
-    if (typeof BX24 === 'undefined') {
-      addLog('BX24 não encontrado no escopo global.', 'err');
-    } else {
-      addLog('BX24 detectado, chamando init()...', 'ok');
-      BX24.init(function() {
-        addLog('BX24.init() disparou o callback.', 'ok');
-        try {
-          BX24.resizeWindow(600, 400, function() {
-            addLog('resizeWindow(600, 400) — callback executado.', 'ok');
+        // Mostra o placement atual
+        document.getElementById('placement-label').textContent = info.placement || 'popup';
+
+        // Pega o taskId do PLACEMENT_OPTIONS original (passado via options)
+        var taskId = options.taskId || null;
+        document.getElementById('task-id').textContent = taskId || '(não recebido)';
+
+        // Testa chamada REST real ao BX24
+        if (taskId) {
+          BX24.callMethod('tasks.task.get', { taskId: taskId }, function(result) {
+            if (result.error()) {
+              document.getElementById('bx24-result').textContent = 'ERRO: ' + JSON.stringify(result.error());
+            } else {
+              var task = result.data().task;
+              document.getElementById('bx24-result').textContent = JSON.stringify({
+                id: task.id,
+                title: task.title,
+                status: task.status,
+                responsible: task.responsible ? task.responsible.name : '—'
+              }, null, 2);
+            }
           });
-          addLog('resizeWindow(600, 400) chamado sem erro imediato.', 'ok');
-        } catch(e) {
-          addLog('ERRO no resizeWindow: ' + e.message, 'err');
+        } else {
+          // Sem taskId, faz uma chamada simples só para provar que o BX24 funciona
+          BX24.callMethod('app.info', {}, function(result) {
+            if (result.error()) {
+              document.getElementById('bx24-result').textContent = 'ERRO: ' + JSON.stringify(result.error());
+            } else {
+              document.getElementById('bx24-result').textContent = JSON.stringify(result.data(), null, 2);
+            }
+          });
         }
-      });
-    }
+
+      } else {
+        // Na aba — fecha o slider e abre o popup, passando o taskId original
+        var originalOptions = info.options || {};
+        var taskId = originalOptions.taskId || null;
+
+        BX24.closeApplication();
+
+        setTimeout(function() {
+          BX24.openApplication(
+            { opened: true, taskId: taskId },
+            function() {},
+            {
+              width: 600,
+              title: 'Meu Widget'
+            }
+          );
+        }, 100);
+      }
+
+    });
   </script>
 </body>
 </html>
